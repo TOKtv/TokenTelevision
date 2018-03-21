@@ -55,11 +55,9 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     bytes32 oraclizeID = oraclize_query(
       "URL",
       strConcat(
-        endPoint,
-        uint2str(_txId),
-        "/",
-        uint2str(msg.value),
-        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender))),
+        strConcat("json(", endPoint, uint2str(_txId), "/", uint2str(msg.value)),
+        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender), ").result")
+      ),
       _gasLimit
     );
     __tempData[oraclizeID] = TempData(msg.sender, _txId, _tier);
@@ -69,7 +67,7 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     require(msg.sender == oraclize_cbAddress());
 
     TempData memory tempData = __tempData[_oraclizeID];
-    if (keccak256(_result) != keccak256('true')) {
+    if (keccak256(_result) == keccak256('true')) {
 
       newSubscriptionConfirmed(tempData.sender, tempData.txId);
       store.setSubscription(tempData.sender, tempData.txId, tempData.tier);
