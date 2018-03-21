@@ -1,4 +1,3 @@
-../pass/ethereum-bridge/node_modules/locate-path/node_modules
 xunit.xml
 debug
 .sass-cache
@@ -18,3 +17,4 @@ log
 installed_contracts
 package-lock.json
 *.env
+node_modules
