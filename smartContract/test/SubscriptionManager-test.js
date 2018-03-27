@@ -3,11 +3,16 @@ const logEvent = require('./helpers/logEvent')
 const log = require('./helpers/log')
 
 const sleep = require('sleep')
+const bigInt = require("big-integer")
 
 const SubscriptionStore = artifacts.require('./SubscriptionStore.sol')
 const SubscriptionManager = artifacts.require('./mocks/SubscriptionManagerMock.sol')
 
 const fixtures = require('./fixtures/index')
+
+function val(x) {
+  return x.valueOf()
+}
 
 contract('SubscriptionManager', accounts => {
 
@@ -18,6 +23,7 @@ contract('SubscriptionManager', accounts => {
 
   const owner = accounts[0]
   const authorized = accounts[1]
+  const beneficiary = accounts[2]
   const subscriber = accounts[8]
   const fakeSubscriber = accounts[7]
 
@@ -78,7 +84,7 @@ contract('SubscriptionManager', accounts => {
 
     let ok = false
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 15; i++) {
       console.log('Waiting for result')
       sleep.sleep(1)
       let uid = await store.getLastTransactionId(good.address)
@@ -111,7 +117,7 @@ contract('SubscriptionManager', accounts => {
 
     let ok = false
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 15; i++) {
       console.log('Waiting for result')
       sleep.sleep(1)
       let uid = await store.getLastTransactionId(bad.address)
@@ -123,6 +129,28 @@ contract('SubscriptionManager', accounts => {
 
     assert.isFalse(ok)
 
+  })
+
+  it('should revert trying to withdraw before setting the beneficiary', async () => {
+    await assertRevert(manager.withdrawEther());
+  })
+
+  it('should set the beneficiary', async () => {
+    await manager.setBeneficiary(beneficiary);
+    assert.equal(await manager.beneficiary(), beneficiary)
+  })
+
+  it('should withdraw the contract balance', async () => {
+
+    const contractBalanceBefore = bigInt(val(await web3.eth.getBalance(manager.address)))
+    const beneficiaryBalanceBefore = bigInt(val(await web3.eth.getBalance(beneficiary)))
+
+    await manager.withdrawEther();
+
+    contractBalance = val(await web3.eth.getBalance(manager.address))
+    assert.equal(contractBalance, 0)
+    const balance = bigInt(val(await web3.eth.getBalance(beneficiary)))
+    assert.equal(balance.compare(beneficiaryBalanceBefore.add(contractBalanceBefore)), 0)
   })
 
 })

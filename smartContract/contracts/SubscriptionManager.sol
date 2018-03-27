@@ -10,6 +10,7 @@ import './SubscriptionStore.sol';
 contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
   event ownershipConfirmed(address addr, string uid);
+  address public beneficiary;
 
   string public endPoint = "https://api.tok.tv/verify-and-get-tier/";
 
@@ -77,9 +78,19 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     }
   }
 
-  function setSubscription(uint _txId, uint8 _tier, address _address) onlyAuthorized {
+  function setSubscription(uint _txId, uint8 _tier, address _address) public onlyAuthorized {
     // this is an emergency function called by customer service to fix issues
     store.setSubscription(_address, _txId, _tier);
+  }
+
+  function setBeneficiary(address _address) public onlyOwner {
+    require(_address != address(0));
+    beneficiary = _address;
+  }
+
+  function withdrawEther() public onlyOwner {
+    require(beneficiary != address(0));
+    beneficiary.transfer(this.balance);
   }
 
   function addressToString(address x) internal pure returns (string) {
