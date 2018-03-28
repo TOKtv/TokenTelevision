@@ -1,0 +1,6 @@
+[submodule "ethereum-bridge"]
+	path = ethereum-bridge
+	url = https://github.com/oraclize/ethereum-bridge.git
+[submodule "authorizable"]
+	path = authorizable
+	url = https://github.com/tweedentity/authorizable
