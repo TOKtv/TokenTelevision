@@ -25,7 +25,7 @@ contract SubscriptionStore is Authorizable {
     tiers[1] = 1 years;
   }
 
-  function setTier(uint8 _tier, uint _duration) public onlyAuthorized {
+  function setTier(uint8 _tier, uint _duration) external onlyAuthorized {
     require(tiers[_tier] == 0);
     // There is no requirement for the _duration because
     // setting the _duration to 0 is equivalent to remove the tier
@@ -33,7 +33,7 @@ contract SubscriptionStore is Authorizable {
     tiers[_tier] = _duration;
   }
 
-  function setSubscription(address _address, uint _txId, uint8 _tier) public onlyAuthorized {
+  function setSubscription(address _address, uint _txId, uint8 _tier) external onlyAuthorized {
     require(_address != address(0));
     if (tiers[_tier] != 0) {
       uint expirationDate;
@@ -52,11 +52,11 @@ contract SubscriptionStore is Authorizable {
     }
   }
 
-  function getLastTransactionId(address _address) public constant returns (uint){
+  function getLastTransactionId(address _address) external constant returns (uint){
     return subscription[_address].lastTransactionId;
   }
 
-  function getExpirationTimestamp(address _address) public constant returns (uint){
+  function getExpirationTimestamp(address _address) external constant returns (uint){
     return subscription[_address].expirationTimestamp;
   }
 

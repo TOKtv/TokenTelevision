@@ -6,7 +6,7 @@ const sleep = require('sleep')
 const bigInt = require("big-integer")
 
 const SubscriptionStore = artifacts.require('./SubscriptionStore.sol')
-const SubscriptionManager = artifacts.require('./mocks/SubscriptionManagerMock.sol')
+const SubscriptionManager = artifacts.require('./SubscriptionManager.sol')
 
 const fixtures = require('./fixtures/index')
 
@@ -26,6 +26,9 @@ contract('SubscriptionManager', accounts => {
   const beneficiary = accounts[2]
   const subscriber = accounts[8]
   const fakeSubscriber = accounts[7]
+  const subscriberWithErrors = accounts[6]
+  const developer = accounts[5]
+  const customerService = accounts[4]
 
   before(async () => {
     store = await SubscriptionStore.new()
@@ -58,6 +61,19 @@ contract('SubscriptionManager', accounts => {
   it('should set the store in the manager', async () => {
     await manager.setStore(store.address)
     assert.isTrue(await manager.storeSet())
+  })
+
+  it('should authorized developer and customerService the handle specific functions', async () => {
+    await manager.authorize(developer, 5)
+    await manager.authorize(customerService, 6)
+    assert.equal(await manager.authorized(developer), 5)
+    assert.equal(await manager.authorized(customerService), 6)
+  })
+
+  it('should change the endPoint', async () => {
+    const newEndPoint = "https://vp-api-crypto-dev.tok.tv/v1/notify-payment/"
+    await manager.changeEndPoint(newEndPoint, {from: developer})
+    assert.equal(await manager.endPoint(), newEndPoint)
   })
 
   // the following two test can be improved logging the event.
@@ -120,15 +136,13 @@ contract('SubscriptionManager', accounts => {
     for (let i = 0; i < 15; i++) {
       console.log('Waiting for result')
       sleep.sleep(1)
-      let uid = await store.getLastTransactionId(bad.address)
+      let uid = await store.getLastTransactionId(fakeSubscriber)
       if (uid == bad.txId) {
         ok = true
         break
       }
     }
-
     assert.isFalse(ok)
-
   })
 
   it('should revert trying to withdraw before setting the beneficiary', async () => {
@@ -151,6 +165,12 @@ contract('SubscriptionManager', accounts => {
     assert.equal(contractBalance, 0)
     const balance = bigInt(val(await web3.eth.getBalance(beneficiary)))
     assert.equal(balance.compare(beneficiaryBalanceBefore.add(contractBalanceBefore)), 0)
+  })
+
+  it('should force a subscription for a subscriber who did not complete the process due to errors', async () => {
+    const withErrors = fixtures.withErrors
+    await manager.setSubscription(withErrors.txId, withErrors.tier, withErrors.address, {from: customerService})
+    assert.equal(await store.getLastTransactionId(subscriberWithErrors), withErrors.txId)
   })
 
 })
