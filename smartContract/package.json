@@ -7,6 +7,7 @@
     "big-integer": "^1.6.27",
     "lodash": "^4.17.4",
     "sleep": "^5.1.1",
+    "truffle-flattener": "^1.2.5",
     "truffle-hdwallet-provider": "0.0.3"
   },
   "scripts": {
@@ -15,6 +16,7 @@
     "test": "truffle test",
     "clear": "rm -rf build/contracts",
     "deployToRopsten": "rm -rf build && source ../testnet.env && source ../infura.env && truffle migrate --network ropsten",
-    "deployToMainnet": "rm -rf build && source ../infura.env && truffle migrate --network mainnet"
+    "deployToMainnet": "rm -rf build && source ../infura.env && truffle migrate --network mainnet",
+    "flatten": "truffle-flattener contracts/SubscriptionStore.sol > flattened/SubscriptionStoreFlattened.sol && truffle-flattener contracts/SubscriptionManager.sol > flattened/SubscriptionManagerFlattened.sol"
   }
 }
