@@ -9,7 +9,6 @@ import './SubscriptionStore.sol';
 
 contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
-  event ownershipConfirmed(address addr, string uid);
   address public beneficiary;
 
   string public endPoint = "https://api.tok.tv/verify-and-get-tier/";
@@ -30,9 +29,9 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     _;
   }
 
-  event newSubscriptionStarted(address _address, uint _txId);
-  event newSubscriptionConfirmed(address _address, uint _txId);
-  event newSubscriptionFailed(address _address, uint _txId);
+  event newSubscriptionStarted(address indexed _address, uint _txId);
+  event newSubscriptionConfirmed(address indexed _address, uint _txId);
+  event newSubscriptionFailed(address indexed _address, uint _txId);
 
   function setStore(address _address) external onlyOwner {
     require(_address != address(0));
