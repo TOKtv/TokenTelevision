@@ -1,11 +1,12 @@
 pragma solidity ^0.4.18;
 
 
-import 'oraclize/usingOraclize.sol';
-import 'zeppelin/lifecycle/Pausable.sol';
-import '../../authorizable/contracts/Authorizable.sol';
-import './SubscriptionStore.sol';
+import 'zeppelin-solidity/contracts/lifecycle/Pausable.sol';
+import 'authorizable/contracts/Authorizable.sol';
 
+import '../../ethereum-api/oraclizeAPI.sol';
+
+import './SubscriptionStore.sol';
 
 contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 

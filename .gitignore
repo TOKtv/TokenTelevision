@@ -18,4 +18,3 @@ installed_contracts
 package-lock.json
 *.env
 node_modules
-flattened

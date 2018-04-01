@@ -10,7 +10,6 @@ To install everything you should clone recursively the repo to download also the
 After you need to run
 ```
 npi i && truffle install
-(cd authorizable && truffle install)
 (cd ethereum-bridge && npm i)
 ```
 At this point, run the test server 

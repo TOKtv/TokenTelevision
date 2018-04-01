@@ -1,7 +1,7 @@
 pragma solidity ^0.4.18;
 
-import 'zeppelin/math/SafeMath.sol';
-import '../../authorizable/contracts/Authorizable.sol';
+import 'zeppelin-solidity/contracts/math/SafeMath.sol';
+import 'authorizable/contracts/Authorizable.sol';
 
 contract SubscriptionStore is Authorizable {
 
