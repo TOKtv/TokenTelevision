@@ -62,4 +62,6 @@ contract('SubscriptionStore', accounts => {
     assert.isTrue(equalBySecond(await store.getExpirationTimestamp(secondSubscriber), now() + oneYear))
   })
 
+
+
 })

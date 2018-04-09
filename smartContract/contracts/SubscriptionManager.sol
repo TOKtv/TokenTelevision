@@ -1,15 +1,15 @@
 pragma solidity ^0.4.18;
 
 
-import 'oraclize/usingOraclize.sol';
-import 'zeppelin/lifecycle/Pausable.sol';
-import '../../authorizable/contracts/Authorizable.sol';
-import './SubscriptionStore.sol';
+import 'zeppelin-solidity/contracts/lifecycle/Pausable.sol';
+import 'authorizable/contracts/Authorizable.sol';
 
+import '../../ethereum-api/oraclizeAPI.sol';
+
+import './SubscriptionStore.sol';
 
 contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
-  event ownershipConfirmed(address addr, string uid);
   address public beneficiary;
 
   string public endPoint = "https://api.tok.tv/verify-and-get-tier/";
@@ -30,25 +30,25 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     _;
   }
 
-  event newSubscriptionStarted(address _address, uint _txId);
-  event newSubscriptionConfirmed(address _address, uint _txId);
-  event newSubscriptionFailed(address _address, uint _txId);
+  event newSubscriptionStarted(address indexed _address, uint _txId);
+  event newSubscriptionConfirmed(address indexed _address, uint _txId);
+  event newSubscriptionFailed(address indexed _address, uint _txId);
 
-  function setStore(address _address) onlyOwner public {
+  function setStore(address _address) external onlyOwner {
     require(_address != address(0));
     store = SubscriptionStore(_address);
     require(store.amIAuthorized());
     storeSet = true;
   }
 
-  function changeEndPoint(string _endPoint) onlyOwner public {
+  function changeEndPoint(string _endPoint) external onlyOwnerOrAuthorizedAtLevel(5) {
     // be careful using this, because setting a wrong endPoint would cause any Oraclize failing
     // the end point has to end with a slash, like the default value
     // TODO add requires for that
     endPoint = _endPoint;
   }
 
-  function verifySubscription(uint _txId, uint8 _tier, uint _gasPrice, uint _gasLimit) public isStoreSet payable {
+  function verifySubscription(uint _txId, uint8 _tier, uint _gasPrice, uint _gasLimit) external isStoreSet payable {
 
     oraclize_setCustomGasPrice(_gasPrice);
     newSubscriptionStarted(msg.sender, _txId);
@@ -78,12 +78,12 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     }
   }
 
-  function setSubscription(uint _txId, uint8 _tier, address _address) public onlyAuthorized {
+  function setSubscription(uint _txId, uint8 _tier, address _address) external onlyOwnerOrAuthorizedAtLevel(6) {
     // this is an emergency function called by customer service to fix issues
     store.setSubscription(_address, _txId, _tier);
   }
 
-  function setBeneficiary(address _address) public onlyOwner {
+  function setBeneficiary(address _address) external onlyOwner {
     require(_address != address(0));
     beneficiary = _address;
   }

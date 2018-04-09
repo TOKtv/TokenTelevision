@@ -5,7 +5,7 @@ npm-debug.log
 .DS_Store
 test_results
 coverage
-/build
+build
 *.backup
 .scratch
 .idea
