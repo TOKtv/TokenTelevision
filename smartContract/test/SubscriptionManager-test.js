@@ -30,9 +30,12 @@ contract('SubscriptionManager', accounts => {
   const developer = accounts[5]
   const customerService = accounts[4]
 
+  let endPoint
+
   before(async () => {
     store = await SubscriptionStore.new()
     manager = await SubscriptionManager.new()
+    endPoint = (await manager.endPoint()).valueOf()
   })
 
   it('should authorize the manager to handle the store', async () => {
@@ -76,6 +79,12 @@ contract('SubscriptionManager', accounts => {
     assert.equal(await manager.endPoint(), newEndPoint)
   })
 
+  it('should reverse the endPoint', async () => {
+    await manager.changeEndPoint(endPoint, {from: developer})
+    assert.equal(await manager.endPoint(), endPoint)
+  })
+
+
   // the following two test can be improved logging the event.
   // But since I have little time today, I am going with a
   // brute force approach.
@@ -95,21 +104,21 @@ contract('SubscriptionManager', accounts => {
     {
       from: good.address, // is subscriber
       value: good.value,
-      gas: 350000
+      gas: 300000
     })
 
-    let ok = false
+    let verified = false
 
     for (let i = 0; i < 15; i++) {
       console.log('Waiting for result')
       sleep.sleep(1)
       let uid = await store.getLastTransactionId(good.address)
       if (uid == good.txId) {
-        ok = true
+        verified = true
         break
       }
     }
-    assert.isTrue(ok)
+    assert.isTrue(verified)
 
   })
 
