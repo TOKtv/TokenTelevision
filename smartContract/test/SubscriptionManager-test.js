@@ -94,7 +94,7 @@ contract('SubscriptionManager', accounts => {
     const good = fixtures.good
 
     const gasPrice = 1e9
-    const gasLimit = 20e4
+    const gasLimit = 16e4
 
     await manager.verifySubscription(
     good.txId,
