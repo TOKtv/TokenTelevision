@@ -12,7 +12,7 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
   address public beneficiary;
 
-  string public endPoint = "https://api.tok.tv/verify-and-get-tier/";
+  string public endPoint = "https://vp-api-crypto-dev.tok.tv/v1/checktx/demo/";
 
   SubscriptionStore public store;
   bool public storeSet;
@@ -55,10 +55,12 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
     bytes32 oraclizeID = oraclize_query(
       "URL",
-      strConcat(
-        strConcat("json(", endPoint, uint2str(_txId), "/", uint2str(msg.value)),
-        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender), ").result")
-      ),
+        strConcat(
+          endPoint,
+          uint2str(_txId),
+          "/",
+          uint2str(msg.value),
+          strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender))),
       _gasLimit
     );
     __tempData[oraclizeID] = TempData(msg.sender, _txId, _tier);

@@ -16,7 +16,7 @@ At this point, run the test server
 ```
 (cd smartContract && npm run testServer)
 ```
-in a terminal. In a second termina run the oraclize bridge
+in a terminal. In a second terminal run the oraclize bridge
 ```
 (cd smartContract && npm run bridge)
 ```
@@ -38,43 +38,56 @@ It is important to check everything, included the `tier` because the smart contr
 
 During the tests, the rpc server is launched with `ganache-cli --mnemonic toktvpass`. Fixing the mnemonic guarantees that Ganache generates every time the same accounts. In our case, the good subscriber is `accounts[8]`, the bad one is `accounts[7]`, etc.
 
-A consideration about the result of the api call.
+## How to deploy to Ropsten
 
-Right now the api returns 
-```
-{
-"result": true
-}
+### 1. Create a test wallet
+
+The easiest way is to run `ganache-cli`. It will use a random mnemonic and use that to generate the wallet.   
+Save securely the mnemonic, the address of the accounts[0] and its private key. That is your new test wallet.  
+Create a text file `testnet.env` and put it in the folder that contains this repo (so that it is not saved on Github).
+In the file, white something like:
+
+```text
+export MNEMONIC="base guitar george mind life tree combat otto war safe beast mogul"
 ```
 
-This is elegant, but not good for the contract. In fact it requires more gas. If the api returns just the the text `true`, we can call Oraclize this way
-```
-bytes32 oraclizeID = oraclize_query(
-      "URL",
-      strConcat(
-        endPoint,
-        uint2str(_txId),
-        "/",
-        uint2str(msg.value),
-        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender))),
-      _gasLimit
-    );
-```
-performing two string concatenations using the Oraclize function `strConcat`.
+### 2. Open an API account on Infura
 
-Though, if the result is a json, we have to call what is right now in this PR
+Connect to https://infura.io  
+Click on get started for free  
+Follow the instruction and generate a unique API identifier. Save the indentifier in the file `infura.env` like this
+
 ```
-bytes32 oraclizeID = oraclize_query(
-      "URL",
-      strConcat(
-        strConcat("json(", endPoint, uint2str(_txId), "/", uint2str(msg.value)),
-        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender), ").result")
-      ),
-      _gasLimit
-    );
+export INFURA_KEY="ABtS63rg7cbunycXMg"
 ```
-which is more expensive because we need to concatenate many more strings and call three times `strConcat` (since it does not accept more than 5 parameters).
 
-I suggest that the api returns just a text with simply `true`.
+### 3. Build the contracts
 
+Run `truffle migrate`
+This will create a folder `build` containing the metadata of the contracts.
+If you open `build/contracts/SubscriptionManager.sol` you will see that the second parameter is `abi`.
 
+### 4. Send some ether to the testnet wallet
+
+On Metamask, connect to Ropsten and from any account that has some ether send 0.4 ether (or more) to the testnet wallet. Those will be used during the deployment.
+
+### 5. Deploy the contract
+
+As soon as the testnet wallet has received the ether you can deploy the smart contract to the testnet.
+To deploy run `npm run deployToRopsten`. It expects to find the the files `testnet.env` and `infura.env` in the folder which contains the repo. If you prefer a different location, modify the script in `package.json`.
+After running the script you will see that it is deploying. At the end of the process it should show you the address where the two contracts have been deployed. Save the addresses.
+
+### 6. Set up the Store
+
+Open [MyEtherWallet](https://myetherwallet.com) and create a new wallet importing the private key of the testnet wallet created before.
+Click on `Contracts`. In the form copy the address where the Store has been published (see above) and the abi of SubscriptionStore.sol (in `build/contracts`).
+MEW loads the contracts and show the functions. Select `authorize` and authorize the address of SubscriptioManager setting the level to 1. It will ask which wallet to use, select the testnet wallet (which is the owner of the contract, since it is the wallet used to publish it).
+
+### 7. Set up the manager
+
+Open MEW in another tab and repeat the process but using address and abi of SubscriptionManager.
+Execute `setStore` passing the address of the Store as parameter.
+
+## In the DApp
+
+You don't need to access directly the store, so you just need to connect to the SubscriptioManager. Set its abi and its address in the javascript file. Consider that Ropsten network id is 3 (4 is Rinkeby's id).
