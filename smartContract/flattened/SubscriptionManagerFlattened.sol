@@ -1,329 +1,6 @@
 pragma solidity ^0.4.18;
 
-// File: zeppelin/ownership/Ownable.sol
-
-/**
- * @title Ownable
- * @dev The Ownable contract has an owner address, and provides basic authorization control
- * functions, this simplifies the implementation of "user permissions".
- */
-contract Ownable {
-  address public owner;
-
-
-  event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-
-  /**
-   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
-   * account.
-   */
-  function Ownable() {
-    owner = msg.sender;
-  }
-
-
-  /**
-   * @dev Throws if called by any account other than the owner.
-   */
-  modifier onlyOwner() {
-    require(msg.sender == owner);
-    _;
-  }
-
-
-  /**
-   * @dev Allows the current owner to transfer control of the contract to a newOwner.
-   * @param newOwner The address to transfer ownership to.
-   */
-  function transferOwnership(address newOwner) onlyOwner public {
-    require(newOwner != address(0));
-    OwnershipTransferred(owner, newOwner);
-    owner = newOwner;
-  }
-
-}
-
-// File: ../authorizable/contracts/Authorizable.sol
-
-// @title Authorizable
-// The Authorizable contract provides authorization control functions.
-
-/*
-  The level is a uint <= maxLevel (64 by default)
-  
-    0 means not authorized
-    1..maxLevel means authorized
-
-  Having more levels allows to create hierarchical roles.
-  For example:
-    ...
-    operatorLevel: 6
-    teamManagerLevel: 10
-    ...
-    CTOLevel: 32
-    ...
-
-  If the owner wants to execute functions which require explicit authorization, it must authorize itself.
-  
-  If you need complex level, in the extended contract, you can add a function to generate unique roles based on combination of levels. The possibilities are almost unlimited, since the level is a uint256
-*/
-
-contract Authorizable is Ownable {
-
-  uint public totalAuthorized;
-
-  mapping(address => uint) public authorized;
-  address[] internal __authorized;
-
-  event AuthorizedAdded(address _authorizer, address _authorized, uint _level);
-
-  event AuthorizedRemoved(address _authorizer, address _authorized);
-
-  uint public maxLevel = 64;
-  uint public authorizerLevel = 56;
-
-  function setLevels(uint _maxLevel, uint _authorizerLevel) external onlyOwner {
-    // this must be called before authorizing any address
-    require(totalAuthorized == 0);
-    require(_maxLevel > 0 && _authorizerLevel > 0);
-    require(_maxLevel >= _authorizerLevel);
-
-    maxLevel = _maxLevel;
-    authorizerLevel = _authorizerLevel;
-  }
-
-  // Throws if called by any account which is not authorized.
-  modifier onlyAuthorized() {
-    require(authorized[msg.sender] > 0);
-    _;
-  }
-
-  // Throws if called by any account which is not authorized at a specific level.
-  modifier onlyAuthorizedAtLevel(uint _level) {
-    require(authorized[msg.sender] == _level);
-    _;
-  }
-
-  // Throws if called by any account which is not authorized at some of the specified levels.
-  modifier onlyAuthorizedAtLevels(uint[] _levels) {
-    require(__hasLevel(authorized[msg.sender], _levels));
-    _;
-  }
-
-  // Throws if called by any account which is not authorized at a minimum required level.
-  modifier onlyAuthorizedAtLevelMoreThan(uint _level) {
-    require(authorized[msg.sender] > _level);
-    _;
-  }
-
-  // Throws if called by any account which has a level of authorization less than a certan maximum.
-  modifier onlyAuthorizedAtLevelLessThan(uint _level) {
-    require(authorized[msg.sender] > 0 && authorized[msg.sender] < _level);
-    _;
-  }
-
-  // same modifiers but including the owner
-
-  modifier onlyOwnerOrAuthorized() {
-    require(msg.sender == owner || authorized[msg.sender] > 0);
-    _;
-  }
-
-  modifier onlyOwnerOrAuthorizedAtLevel(uint _level) {
-    require(msg.sender == owner || authorized[msg.sender] == _level);
-    _;
-  }
-
-  modifier onlyOwnerOrAuthorizedAtLevels(uint[] _levels) {
-    require(msg.sender == owner || __hasLevel(authorized[msg.sender], _levels));
-    _;
-  }
-
-  modifier onlyOwnerOrAuthorizedAtLevelMoreThan(uint _level) {
-    require(msg.sender == owner || authorized[msg.sender] > _level);
-    _;
-  }
-
-  modifier onlyOwnerOrAuthorizedAtLevelLessThan(uint _level) {
-    require(msg.sender == owner || (authorized[msg.sender] > 0 && authorized[msg.sender] < _level));
-    _;
-  }
-
-  // Throws if called by anyone who is not an authorizer.
-  modifier onlyAuthorizer() {
-    require(msg.sender == owner || authorized[msg.sender] >= authorizerLevel);
-    _;
-  }
-
-
-  // methods
-
-  // Allows the current owner and authorized with level >= authorizerLevel to add a new authorized address, or remove it, setting _level to 0
-  function authorize(address _address, uint _level) onlyAuthorizer external {
-    __authorize(_address, _level);
-  }
-
-  // Allows the current owner to remove all the authorizations.
-  function deAuthorizeAll() onlyOwner external {
-    for (uint i = 0; i < __authorized.length; i++) {
-      if (__authorized[i] != address(0)) {
-        __authorize(__authorized[i], 0);
-      }
-    }
-  }
-
-  // Allows an authorized to de-authorize itself.
-  function deAuthorize() onlyAuthorized external {
-    __authorize(msg.sender, 0);
-  }
-
-  // internal functions
-  function __authorize(address _address, uint _level) internal {
-    require(_address != address(0));
-    require(_level >= 0 && _level <= maxLevel);
-
-    uint i;
-    if (_level > 0) {
-      bool alreadyIndexed = false;
-      for (i = 0; i < __authorized.length; i++) {
-        if (__authorized[i] == _address) {
-          alreadyIndexed = true;
-          break;
-        }
-      }
-      if (alreadyIndexed == false) {
-        __authorized.push(_address);
-        totalAuthorized++;
-      }
-      AuthorizedAdded(msg.sender, _address, _level);
-      authorized[_address] = _level;
-    } else {
-      for (i = 0; i < __authorized.length; i++) {
-        if (__authorized[i] == _address) {
-          __authorized[i] = address(0);
-          totalAuthorized--;
-          break;
-        }
-      }
-      AuthorizedRemoved(msg.sender, _address);
-      delete authorized[_address];
-    }
-  }
-
-  function __hasLevel(uint _level, uint[] _levels) internal pure returns (bool) {
-    bool has = false;
-    for (uint i; i < _levels.length; i++) {
-      if (_level == _levels[i]) {
-        has = true;
-        break;
-      }
-    }
-    return has;
-  }
-
-  // helpers callable by other contracts
-
-  function amIAuthorized() external constant returns (bool) {
-    return authorized[msg.sender] > 0;
-  }
-
-}
-
-// File: zeppelin/math/SafeMath.sol
-
-/**
- * @title SafeMath
- * @dev Math operations with safety checks that throw on error
- */
-library SafeMath {
-  function mul(uint256 a, uint256 b) internal constant returns (uint256) {
-    uint256 c = a * b;
-    assert(a == 0 || c / a == b);
-    return c;
-  }
-
-  function div(uint256 a, uint256 b) internal constant returns (uint256) {
-    // assert(b > 0); // Solidity automatically throws when dividing by 0
-    uint256 c = a / b;
-    // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-    return c;
-  }
-
-  function sub(uint256 a, uint256 b) internal constant returns (uint256) {
-    assert(b <= a);
-    return a - b;
-  }
-
-  function add(uint256 a, uint256 b) internal constant returns (uint256) {
-    uint256 c = a + b;
-    assert(c >= a);
-    return c;
-  }
-}
-
-// File: contracts/SubscriptionStore.sol
-
-contract SubscriptionStore is Authorizable {
-
-  using SafeMath for uint;
-
-  mapping(uint8 => uint) public tiers;
-
-  struct Subscription {
-    uint lastTransactionId;
-    uint expirationTimestamp;
-  }
-
-  mapping(address => Subscription) public subscription;
-
-  // events
-
-  event newSubscription(address _address, uint _txId, bool _result);
-
-  function SubscriptionStore() public {
-    tiers[0] = 30 days;
-    tiers[1] = 1 years;
-  }
-
-  function setTier(uint8 _tier, uint _duration) external onlyAuthorized {
-    require(tiers[_tier] == 0);
-    // There is no requirement for the _duration because
-    // setting the _duration to 0 is equivalent to remove the tier
-
-    tiers[_tier] = _duration;
-  }
-
-  function setSubscription(address _address, uint _txId, uint8 _tier) external onlyAuthorized {
-    require(_address != address(0));
-    if (tiers[_tier] != 0) {
-      uint expirationDate;
-      if (subscription[_address].expirationTimestamp != 0) {
-        // subscription renew/extension
-        expirationDate = subscription[_address].expirationTimestamp.add(tiers[_tier]);
-      } else {
-        expirationDate = now + tiers[_tier];
-      }
-      subscription[_address] = Subscription(_txId, expirationDate);
-
-      newSubscription(_address, _txId, true);
-    } else {
-      // this avoid to revert, so that we have a listenable event if the tier does not exist
-      newSubscription(_address, _txId, false);
-    }
-  }
-
-  function getLastTransactionId(address _address) external constant returns (uint){
-    return subscription[_address].lastTransactionId;
-  }
-
-  function getExpirationTimestamp(address _address) external constant returns (uint){
-    return subscription[_address].expirationTimestamp;
-  }
-
-}
-
-// File: oraclize/usingOraclize.sol
+// File: ../ethereum-api/oraclizeAPI.sol
 
 // <ORACLIZE_API>
 /*
@@ -355,7 +32,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-
+pragma solidity ^0.4.0;//please import oraclizeAPI_pre0.4.sol when solidity < 0.4.0
 
 contract OraclizeI {
     address public cbAddress;
@@ -396,8 +73,12 @@ contract usingOraclize {
 
     OraclizeI oraclize;
     modifier oraclizeAPI {
-        if((address(OAR)==0)||(getCodeSize(address(OAR))==0)) oraclize_setNetwork(networkID_auto);
-        oraclize = OraclizeI(OAR.getAddress());
+        if((address(OAR)==0)||(getCodeSize(address(OAR))==0))
+            oraclize_setNetwork(networkID_auto);
+
+        if(address(oraclize) != OAR.getAddress())
+            oraclize = OraclizeI(OAR.getAddress());
+
         _;
     }
     modifier coupon(string code){
@@ -447,7 +128,7 @@ contract usingOraclize {
     }
     function __callback(bytes32 myid, string result, bytes proof) {
     }
-    
+
     function oraclize_useCoupon(string code) oraclizeAPI internal {
         oraclize.useCoupon(code);
     }
@@ -459,7 +140,7 @@ contract usingOraclize {
     function oraclize_getPrice(string datasource, uint gaslimit) oraclizeAPI internal returns (uint){
         return oraclize.getPrice(datasource, gaslimit);
     }
-    
+
     function oraclize_query(string datasource, string arg) oraclizeAPI internal returns (bytes32 id){
         uint price = oraclize.getPrice(datasource);
         if (price > 1 ether + tx.gasprice*200000) return 0; // unexpectedly high price
@@ -541,10 +222,10 @@ contract usingOraclize {
     }
     function oraclize_query(string datasource, string[1] args, uint gaslimit) oraclizeAPI internal returns (bytes32 id) {
         string[] memory dynargs = new string[](1);
-        dynargs[0] = args[0];       
+        dynargs[0] = args[0];
         return oraclize_query(datasource, dynargs, gaslimit);
     }
-    
+
     function oraclize_query(string datasource, string[2] args) oraclizeAPI internal returns (bytes32 id) {
         string[] memory dynargs = new string[](2);
         dynargs[0] = args[0];
@@ -597,7 +278,7 @@ contract usingOraclize {
         dynargs[2] = args[2];
         return oraclize_query(datasource, dynargs, gaslimit);
     }
-    
+
     function oraclize_query(string datasource, string[4] args) oraclizeAPI internal returns (bytes32 id) {
         string[] memory dynargs = new string[](4);
         dynargs[0] = args[0];
@@ -707,10 +388,10 @@ contract usingOraclize {
     }
     function oraclize_query(string datasource, bytes[1] args, uint gaslimit) oraclizeAPI internal returns (bytes32 id) {
         bytes[] memory dynargs = new bytes[](1);
-        dynargs[0] = args[0];       
+        dynargs[0] = args[0];
         return oraclize_query(datasource, dynargs, gaslimit);
     }
-    
+
     function oraclize_query(string datasource, bytes[2] args) oraclizeAPI internal returns (bytes32 id) {
         bytes[] memory dynargs = new bytes[](2);
         dynargs[0] = args[0];
@@ -763,7 +444,7 @@ contract usingOraclize {
         dynargs[2] = args[2];
         return oraclize_query(datasource, dynargs, gaslimit);
     }
-    
+
     function oraclize_query(string datasource, bytes[4] args) oraclizeAPI internal returns (bytes32 id) {
         bytes[] memory dynargs = new bytes[](4);
         dynargs[0] = args[0];
@@ -845,7 +526,7 @@ contract usingOraclize {
     function oraclize_setConfig(bytes32 config) oraclizeAPI internal {
         return oraclize.setConfig(config);
     }
-    
+
     function oraclize_randomDS_getSessionPubKeyHash() oraclizeAPI internal returns (bytes32){
         return oraclize.randomDS_getSessionPubKeyHash();
     }
@@ -990,7 +671,7 @@ contract usingOraclize {
         }
         return string(bstr);
     }
-    
+
     function stra2cbor(string[] arr) internal returns (bytes) {
             uint arrlen = arr.length;
 
@@ -1074,19 +755,21 @@ contract usingOraclize {
             }
             return res;
         }
-        
-        
+
+
     string oraclize_network_name;
     function oraclize_setNetworkName(string _network_name) internal {
         oraclize_network_name = _network_name;
     }
-    
+
     function oraclize_getNetworkName() internal returns (string) {
         return oraclize_network_name;
     }
-    
+
     function oraclize_newRandomDSQuery(uint _delay, uint _nbytes, uint _customGasLimit) internal returns (bytes32){
         if ((_nbytes == 0)||(_nbytes > 32)) throw;
+	// Convert from seconds to ledger timer ticks
+        _delay *= 10; 
         bytes memory nbytes = new bytes(1);
         nbytes[0] = byte(_nbytes);
         bytes memory unonce = new bytes(32);
@@ -1098,26 +781,50 @@ contract usingOraclize {
             mstore(sessionKeyHash, 0x20)
             mstore(add(sessionKeyHash, 0x20), sessionKeyHash_bytes32)
         }
-        bytes[3] memory args = [unonce, nbytes, sessionKeyHash]; 
-        bytes32 queryId = oraclize_query(_delay, "random", args, _customGasLimit);
-        oraclize_randomDS_setCommitment(queryId, sha3(bytes8(_delay), args[1], sha256(args[0]), args[2]));
+        bytes memory delay = new bytes(32);
+        assembly { 
+            mstore(add(delay, 0x20), _delay) 
+        }
+        
+        bytes memory delay_bytes8 = new bytes(8);
+        copyBytes(delay, 24, 8, delay_bytes8, 0);
+
+        bytes[4] memory args = [unonce, nbytes, sessionKeyHash, delay];
+        bytes32 queryId = oraclize_query("random", args, _customGasLimit);
+        
+        bytes memory delay_bytes8_left = new bytes(8);
+        
+        assembly {
+            let x := mload(add(delay_bytes8, 0x20))
+            mstore8(add(delay_bytes8_left, 0x27), div(x, 0x100000000000000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x26), div(x, 0x1000000000000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x25), div(x, 0x10000000000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x24), div(x, 0x100000000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x23), div(x, 0x1000000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x22), div(x, 0x10000000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x21), div(x, 0x100000000000000000000000000000000000000000000000000))
+            mstore8(add(delay_bytes8_left, 0x20), div(x, 0x1000000000000000000000000000000000000000000000000))
+
+        }
+        
+        oraclize_randomDS_setCommitment(queryId, sha3(delay_bytes8_left, args[1], sha256(args[0]), args[2]));
         return queryId;
     }
     
     function oraclize_randomDS_setCommitment(bytes32 queryId, bytes32 commitment) internal {
         oraclize_randomDS_args[queryId] = commitment;
     }
-    
+
     mapping(bytes32=>bytes32) oraclize_randomDS_args;
     mapping(bytes32=>bool) oraclize_randomDS_sessionKeysHashVerified;
 
     function verifySig(bytes32 tosignh, bytes dersig, bytes pubkey) internal returns (bool){
         bool sigok;
         address signer;
-        
+
         bytes32 sigr;
         bytes32 sigs;
-        
+
         bytes memory sigr_ = new bytes(32);
         uint offset = 4+(uint(dersig[3]) - 0x20);
         sigr_ = copyBytes(dersig, offset, 32, sigr_, 0);
@@ -1129,8 +836,8 @@ contract usingOraclize {
             sigr := mload(add(sigr_, 32))
             sigs := mload(add(sigs_, 32))
         }
-        
-        
+
+
         (sigok, signer) = safer_ecrecover(tosignh, 27, sigr, sigs);
         if (address(sha3(pubkey)) == signer) return true;
         else {
@@ -1141,109 +848,114 @@ contract usingOraclize {
 
     function oraclize_randomDS_proofVerify__sessionKeyValidity(bytes proof, uint sig2offset) internal returns (bool) {
         bool sigok;
-        
+
         // Step 6: verify the attestation signature, APPKEY1 must sign the sessionKey from the correct ledger app (CODEHASH)
         bytes memory sig2 = new bytes(uint(proof[sig2offset+1])+2);
         copyBytes(proof, sig2offset, sig2.length, sig2, 0);
-        
+
         bytes memory appkey1_pubkey = new bytes(64);
         copyBytes(proof, 3+1, 64, appkey1_pubkey, 0);
-        
+
         bytes memory tosign2 = new bytes(1+65+32);
         tosign2[0] = 1; //role
         copyBytes(proof, sig2offset-65, 65, tosign2, 1);
         bytes memory CODEHASH = hex"fd94fa71bc0ba10d39d464d0d8f465efeef0a2764e3887fcc9df41ded20f505c";
         copyBytes(CODEHASH, 0, 32, tosign2, 1+65);
         sigok = verifySig(sha256(tosign2), sig2, appkey1_pubkey);
-        
+
         if (sigok == false) return false;
-        
-        
+
+
         // Step 7: verify the APPKEY1 provenance (must be signed by Ledger)
         bytes memory LEDGERKEY = hex"7fb956469c5c9b89840d55b43537e66a98dd4811ea0a27224272c2e5622911e8537a2f8e86a46baec82864e98dd01e9ccc2f8bc5dfc9cbe5a91a290498dd96e4";
-        
+
         bytes memory tosign3 = new bytes(1+65);
         tosign3[0] = 0xFE;
         copyBytes(proof, 3, 65, tosign3, 1);
-        
+
         bytes memory sig3 = new bytes(uint(proof[3+65+1])+2);
         copyBytes(proof, 3+65, sig3.length, sig3, 0);
-        
+
         sigok = verifySig(sha256(tosign3), sig3, LEDGERKEY);
-        
+
         return sigok;
     }
-    
+
     modifier oraclize_randomDS_proofVerify(bytes32 _queryId, string _result, bytes _proof) {
         // Step 1: the prefix has to match 'LP\x01' (Ledger Proof version 1)
         if ((_proof[0] != "L")||(_proof[1] != "P")||(_proof[2] != 1)) throw;
-        
+
         bool proofVerified = oraclize_randomDS_proofVerify__main(_proof, _queryId, bytes(_result), oraclize_getNetworkName());
         if (proofVerified == false) throw;
-        
+
         _;
     }
-    
-    function matchBytes32Prefix(bytes32 content, bytes prefix) internal returns (bool){
+
+    function oraclize_randomDS_proofVerify__returnCode(bytes32 _queryId, string _result, bytes _proof) internal returns (uint8){
+        // Step 1: the prefix has to match 'LP\x01' (Ledger Proof version 1)
+        if ((_proof[0] != "L")||(_proof[1] != "P")||(_proof[2] != 1)) return 1;
+
+        bool proofVerified = oraclize_randomDS_proofVerify__main(_proof, _queryId, bytes(_result), oraclize_getNetworkName());
+        if (proofVerified == false) return 2;
+
+        return 0;
+    }
+
+    function matchBytes32Prefix(bytes32 content, bytes prefix, uint n_random_bytes) internal returns (bool){
         bool match_ = true;
-        
-        for (var i=0; i<prefix.length; i++){
+	
+	if (prefix.length != n_random_bytes) throw;
+	        
+        for (uint256 i=0; i< n_random_bytes; i++) {
             if (content[i] != prefix[i]) match_ = false;
         }
-        
+
         return match_;
     }
 
     function oraclize_randomDS_proofVerify__main(bytes proof, bytes32 queryId, bytes result, string context_name) internal returns (bool){
-        bool checkok;
-        
-        
+
         // Step 2: the unique keyhash has to match with the sha256 of (context name + queryId)
         uint ledgerProofLength = 3+65+(uint(proof[3+65+1])+2)+32;
         bytes memory keyhash = new bytes(32);
         copyBytes(proof, ledgerProofLength, 32, keyhash, 0);
-        checkok = (sha3(keyhash) == sha3(sha256(context_name, queryId)));
-        if (checkok == false) return false;
-        
+        if (!(sha3(keyhash) == sha3(sha256(context_name, queryId)))) return false;
+
         bytes memory sig1 = new bytes(uint(proof[ledgerProofLength+(32+8+1+32)+1])+2);
         copyBytes(proof, ledgerProofLength+(32+8+1+32), sig1.length, sig1, 0);
-        
-        
+
         // Step 3: we assume sig1 is valid (it will be verified during step 5) and we verify if 'result' is the prefix of sha256(sig1)
-        checkok = matchBytes32Prefix(sha256(sig1), result);
-        if (checkok == false) return false;
-        
-        
+        if (!matchBytes32Prefix(sha256(sig1), result, uint(proof[ledgerProofLength+32+8]))) return false;
+
         // Step 4: commitment match verification, sha3(delay, nbytes, unonce, sessionKeyHash) == commitment in storage.
         // This is to verify that the computed args match with the ones specified in the query.
         bytes memory commitmentSlice1 = new bytes(8+1+32);
         copyBytes(proof, ledgerProofLength+32, 8+1+32, commitmentSlice1, 0);
-        
+
         bytes memory sessionPubkey = new bytes(64);
         uint sig2offset = ledgerProofLength+32+(8+1+32)+sig1.length+65;
         copyBytes(proof, sig2offset-64, 64, sessionPubkey, 0);
-        
+
         bytes32 sessionPubkeyHash = sha256(sessionPubkey);
         if (oraclize_randomDS_args[queryId] == sha3(commitmentSlice1, sessionPubkeyHash)){ //unonce, nbytes and sessionKeyHash match
             delete oraclize_randomDS_args[queryId];
         } else return false;
-        
-        
+
+
         // Step 5: validity verification for sig1 (keyhash and args signed with the sessionKey)
         bytes memory tosign1 = new bytes(32+8+1+32);
         copyBytes(proof, ledgerProofLength, 32+8+1+32, tosign1, 0);
-        checkok = verifySig(sha256(tosign1), sig1, sessionPubkey);
-        if (checkok == false) return false;
-        
+        if (!verifySig(sha256(tosign1), sig1, sessionPubkey)) return false;
+
         // verify if sessionPubkeyHash was verified already, if not.. let's do it!
         if (oraclize_randomDS_sessionKeysHashVerified[sessionPubkeyHash] == false){
             oraclize_randomDS_sessionKeysHashVerified[sessionPubkeyHash] = oraclize_randomDS_proofVerify__sessionKeyValidity(proof, sig2offset);
         }
-        
+
         return oraclize_randomDS_sessionKeysHashVerified[sessionPubkeyHash];
     }
 
-    
+
     // the following function has been written by Alex Beregszaszi (@axic), use it under the terms of the MIT license
     function copyBytes(bytes from, uint fromOffset, uint length, bytes to, uint toOffset) internal returns (bytes) {
         uint minLength = length + toOffset;
@@ -1268,7 +980,7 @@ contract usingOraclize {
 
         return to;
     }
-    
+
     // the following function has been written by Alex Beregszaszi (@axic), use it under the terms of the MIT license
     // Duplicate Solidity's ecrecover, but catching the CALL return value
     function safer_ecrecover(bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal returns (bool, address) {
@@ -1294,7 +1006,7 @@ contract usingOraclize {
             ret := call(3000, 1, 0, size, 128, size, 32)
             addr := mload(size)
         }
-  
+
         return (ret, addr);
     }
 
@@ -1338,11 +1050,428 @@ contract usingOraclize {
 
         return safer_ecrecover(hash, v, r, s);
     }
-        
+
 }
 // </ORACLIZE_API>
 
-// File: zeppelin/lifecycle/Pausable.sol
+// File: zeppelin-solidity/contracts/ownership/Ownable.sol
+
+/**
+ * @title Ownable
+ * @dev The Ownable contract has an owner address, and provides basic authorization control
+ * functions, this simplifies the implementation of "user permissions".
+ */
+contract Ownable {
+  address public owner;
+
+
+  event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+
+  /**
+   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
+   * account.
+   */
+  function Ownable() public {
+    owner = msg.sender;
+  }
+
+  /**
+   * @dev Throws if called by any account other than the owner.
+   */
+  modifier onlyOwner() {
+    require(msg.sender == owner);
+    _;
+  }
+
+  /**
+   * @dev Allows the current owner to transfer control of the contract to a newOwner.
+   * @param newOwner The address to transfer ownership to.
+   */
+  function transferOwnership(address newOwner) public onlyOwner {
+    require(newOwner != address(0));
+    OwnershipTransferred(owner, newOwner);
+    owner = newOwner;
+  }
+
+}
+
+// File: authorizable/contracts/Authorizable.sol
+
+/**
+ * @title Authorizable
+ * @author Francesco Sullo <francesco@sullo.co>
+ * @dev The Authorizable contract provides governance.
+ */
+
+contract Authorizable /** 0.1.6 */ is Ownable {
+
+  uint public totalAuthorized;
+
+  mapping(address => uint) public authorized;
+  address[] internal __authorized;
+
+  event AuthorizedAdded(address _authorizer, address _authorized, uint _level);
+
+  event AuthorizedRemoved(address _authorizer, address _authorized);
+
+  uint public maxLevel = 64;
+  uint public authorizerLevel = 56;
+
+  bool public selfRevoke = true;
+  mapping (uint => bool) public selfRevokeException;
+
+  /**
+   * @dev Set the range of levels accepted by the contract
+   * @param _maxLevel The max level acceptable
+   * @param _authorizerLevel The minimum level to qualify a wallet as authorizer
+   */
+  function setLevels(uint _maxLevel, uint _authorizerLevel) external onlyOwner {
+    // this must be called before authorizing any address
+    require(totalAuthorized == 0);
+    require(_maxLevel > 0 && _authorizerLevel > 0);
+    require(_maxLevel >= _authorizerLevel);
+
+    maxLevel = _maxLevel;
+    authorizerLevel = _authorizerLevel;
+  }
+
+  /**
+  * @dev Allows to decide if users will be able to self revoke their level
+  * @param _selfRevoke The new value
+  */
+  function setSelfRevoke(bool _selfRevoke) onlyOwner external {
+    selfRevoke = _selfRevoke;
+  }
+
+  /**
+  * @dev Allows to set exceptions to selfRevoke when this is true
+  * @param _level The level not allowed to self-revoke
+  * @param _isActive `true` adds the lock, `false` removes it
+  */
+  function addSelfRevokeException(uint _level, bool _isActive) onlyOwner external {
+    selfRevokeException[_level] = _isActive;
+  }
+
+  /**
+   * @dev Throws if called by any account which is not authorized.
+   */
+  modifier onlyAuthorized() {
+    require(authorized[msg.sender] > 0);
+    _;
+  }
+
+  /**
+   * @dev Throws if called by any account which is not
+   *      authorized at a specific level.
+   * @param _level Level required
+   */
+  modifier onlyAuthorizedAtLevel(uint _level) {
+    require(authorized[msg.sender] == _level);
+    _;
+  }
+
+  /**
+   * @dev Throws if called by any account which is not authorized
+   *      at some of the specified levels.
+   * @param _levels Levels required
+   */
+  modifier onlyAuthorizedAtLevels(uint[] _levels) {
+    require(__hasLevel(authorized[msg.sender], _levels));
+    _;
+  }
+
+  /**
+   * @dev Throws if called by any account which has
+   *      a level of authorization not in the interval
+   * @param _minLevel Minimum level required
+   * @param _maxLevel Maximum level required
+   */
+  modifier onlyAuthorizedAtLevelsWithin(uint _minLevel, uint _maxLevel) {
+    require(authorized[msg.sender] >= _minLevel && authorized[msg.sender] <= _maxLevel);
+    _;
+  }
+
+  /**
+    * @dev same modifiers above, but including the owner
+    */
+  modifier onlyOwnerOrAuthorized() {
+    require(msg.sender == owner || authorized[msg.sender] > 0);
+    _;
+  }
+
+  modifier onlyOwnerOrAuthorizedAtLevel(uint _level) {
+    require(msg.sender == owner || authorized[msg.sender] == _level);
+    _;
+  }
+
+  modifier onlyOwnerOrAuthorizedAtLevels(uint[] _levels) {
+    require(msg.sender == owner || __hasLevel(authorized[msg.sender], _levels));
+    _;
+  }
+
+  modifier onlyOwnerOrAuthorizedAtLevelsIn(uint _minLevel, uint _maxLevel) {
+    require(msg.sender == owner || (authorized[msg.sender] >= _minLevel && authorized[msg.sender] <= _maxLevel));
+    _;
+  }
+
+  /**
+    * @dev Throws if called by anyone who is not an authorizer.
+    */
+  modifier onlyAuthorizer() {
+    require(msg.sender == owner || authorized[msg.sender] >= authorizerLevel);
+    _;
+  }
+
+
+  /**
+    * @dev Allows to add a new authorized address, or remove it, setting _level to 0
+    * @param _address The address to be authorized
+    * @param _level The level of authorization
+    */
+  function authorize(address _address, uint _level) onlyAuthorizer external {
+    __authorize(_address, _level);
+  }
+
+  /**
+    * @dev Allows to add a list of new authorized addresses.
+    *      Useful, for example, with whitelists
+    * @param _addresses Array of addresses to be authorized
+    * @param _level The level of authorization
+    */
+  function authorizeBatch(address[] _addresses, uint _level) onlyAuthorizer external {
+    require(_level > 0);
+    for (uint i = 0; i < _addresses.length; i++) {
+      __authorize(_addresses[i], _level);
+    }
+  }
+
+  /**
+   * @dev Allows to remove all the authorizations. Callable by the owner only.
+   *      We check the gas to avoid going out of gas when there are tons of
+   *      authorized addresses (for example when used for a whitelist).
+   *      If at the end of the operation there are still authorized
+   *      wallets the operation must be repeated.
+   */
+  function deAuthorizeAll() onlyOwner external {
+    for (uint i = 0; i < __authorized.length && msg.gas > 33e3; i++) {
+      if (__authorized[i] != address(0)) {
+        __authorize(__authorized[i], 0);
+      }
+    }
+  }
+
+  /**
+   * @dev Allows to remove all the authorizations at a specific level.
+   * @param _level The level of authorization
+   */
+  function deAuthorizeAllAtLevel(uint _level) onlyAuthorizer external {
+    for (uint i = 0; i < __authorized.length && msg.gas > 33e3; i++) {
+      if (__authorized[i] != address(0) && authorized[__authorized[i]] == _level) {
+        __authorize(__authorized[i], 0);
+      }
+    }
+  }
+
+  /**
+   * @dev Allows an authorized to de-authorize itself.
+   */
+  function deAuthorize() onlyAuthorized external {
+    require(selfRevoke == true && selfRevokeException[authorized[msg.sender]] == false);
+    __authorize(msg.sender, 0);
+  }
+
+  /**
+   * @dev Performs the actual authorization/de-authorization
+   *      If there's no change, it doesn't emit any event, to reduce gas usage.
+   * @param _address The address to be authorized
+   * @param _level The level of authorization. 0 to remove it.
+   */
+  function __authorize(address _address, uint _level) internal {
+    require(_address != address(0));
+    require(_level <= maxLevel);
+
+    uint i;
+    if (_level > 0 && authorized[_address] != _level) {
+        bool alreadyIndexed = false;
+        for (i = 0; i < __authorized.length; i++) {
+          if (__authorized[i] == _address) {
+            alreadyIndexed = true;
+            break;
+          }
+        }
+        if (alreadyIndexed == false) {
+          bool emptyFound = false;
+          // before we try to reuse an empty element of the array
+          for (i = 0; i < __authorized.length; i++) {
+            if (__authorized[i] == 0) {
+              __authorized[i] = _address;
+              emptyFound = true;
+              break;
+            }
+          }
+          if (emptyFound == false) {
+            __authorized.push(_address);
+          }
+          totalAuthorized++;
+        }
+        AuthorizedAdded(msg.sender, _address, _level);
+        authorized[_address] = _level;
+    } else if (_level == 0 && authorized[_address] > 0) {
+      for (i = 0; i < __authorized.length; i++) {
+        if (__authorized[i] == _address) {
+          __authorized[i] = address(0);
+          totalAuthorized--;
+          AuthorizedRemoved(msg.sender, _address);
+          delete authorized[_address];
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * @dev Check is a level is included in an array of levels. Used by modifiers
+   * @param _level Level to be checked
+   * @param _levels Array of required levels
+   */
+  function __hasLevel(uint _level, uint[] _levels) internal pure returns (bool) {
+    bool has = false;
+    for (uint i; i < _levels.length; i++) {
+      if (_level == _levels[i]) {
+        has = true;
+        break;
+      }
+    }
+    return has;
+  }
+
+  /**
+   * @dev Allows a wallet to check if it is authorized
+   */
+  function amIAuthorized() external constant returns (bool) {
+    return authorized[msg.sender] > 0;
+  }
+
+  /**
+   * @dev Allows any authorizer to get the list of the authorized wallets
+   */
+  function getAuthorized() external onlyAuthorizer constant returns (address[]) {
+    return __authorized;
+  }
+
+}
+
+// File: zeppelin-solidity/contracts/math/SafeMath.sol
+
+/**
+ * @title SafeMath
+ * @dev Math operations with safety checks that throw on error
+ */
+library SafeMath {
+
+  /**
+  * @dev Multiplies two numbers, throws on overflow.
+  */
+  function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+    if (a == 0) {
+      return 0;
+    }
+    uint256 c = a * b;
+    assert(c / a == b);
+    return c;
+  }
+
+  /**
+  * @dev Integer division of two numbers, truncating the quotient.
+  */
+  function div(uint256 a, uint256 b) internal pure returns (uint256) {
+    // assert(b > 0); // Solidity automatically throws when dividing by 0
+    uint256 c = a / b;
+    // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+    return c;
+  }
+
+  /**
+  * @dev Subtracts two numbers, throws on overflow (i.e. if subtrahend is greater than minuend).
+  */
+  function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+    assert(b <= a);
+    return a - b;
+  }
+
+  /**
+  * @dev Adds two numbers, throws on overflow.
+  */
+  function add(uint256 a, uint256 b) internal pure returns (uint256) {
+    uint256 c = a + b;
+    assert(c >= a);
+    return c;
+  }
+}
+
+// File: contracts/SubscriptionStore.sol
+
+contract SubscriptionStore is Authorizable {
+
+  using SafeMath for uint;
+
+  mapping(uint8 => uint) public tiers;
+
+  struct Subscription {
+    uint lastTransactionId;
+    uint expirationTimestamp;
+  }
+
+  mapping(address => Subscription) public subscription;
+
+  // events
+
+  event newSubscription(address _address, uint _txId, bool _result);
+
+  function SubscriptionStore() public {
+    tiers[0] = 30 days;
+    tiers[1] = 1 years;
+  }
+
+  function setTier(uint8 _tier, uint _duration) external onlyAuthorized {
+    require(tiers[_tier] == 0);
+    // There is no requirement for the _duration because
+    // setting the _duration to 0 is equivalent to remove the tier
+
+    tiers[_tier] = _duration;
+  }
+
+  function setSubscription(address _address, uint _txId, uint8 _tier) external onlyAuthorized {
+    require(_address != address(0));
+    if (tiers[_tier] != 0) {
+      uint expirationDate;
+      if (subscription[_address].expirationTimestamp != 0) {
+        // subscription renew/extension
+        expirationDate = subscription[_address].expirationTimestamp.add(tiers[_tier]);
+      } else {
+        expirationDate = now + tiers[_tier];
+      }
+      subscription[_address] = Subscription(_txId, expirationDate);
+
+      newSubscription(_address, _txId, true);
+    } else {
+      // this avoid to revert, so that we have a listenable event if the tier does not exist
+      newSubscription(_address, _txId, false);
+    }
+  }
+
+  function getLastTransactionId(address _address) external constant returns (uint){
+    return subscription[_address].lastTransactionId;
+  }
+
+  function getExpirationTimestamp(address _address) external constant returns (uint){
+    return subscription[_address].expirationTimestamp;
+  }
+
+}
+
+// File: zeppelin-solidity/contracts/lifecycle/Pausable.sol
 
 /**
  * @title Pausable
@@ -1394,7 +1523,7 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
   address public beneficiary;
 
-  string public endPoint = "https://api.tok.tv/verify-and-get-tier/";
+  string public endPoint = "https://vp-api-crypto-dev.tok.tv/v1/checktx/demo/";
 
   SubscriptionStore public store;
   bool public storeSet;
@@ -1437,10 +1566,12 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
 
     bytes32 oraclizeID = oraclize_query(
       "URL",
-      strConcat(
-        strConcat("json(", endPoint, uint2str(_txId), "/", uint2str(msg.value)),
-        strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender), ").result")
-      ),
+        strConcat(
+          endPoint,
+          uint2str(_txId),
+          "/",
+          uint2str(msg.value),
+          strConcat("/", uint2str(uint(_tier)), "/0x", addressToString(msg.sender))),
       _gasLimit
     );
     __tempData[oraclizeID] = TempData(msg.sender, _txId, _tier);

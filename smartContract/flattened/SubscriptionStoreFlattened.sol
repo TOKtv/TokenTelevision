@@ -1,6 +1,6 @@
 pragma solidity ^0.4.18;
 
-// File: zeppelin/ownership/Ownable.sol
+// File: zeppelin-solidity/contracts/ownership/Ownable.sol
 
 /**
  * @title Ownable
@@ -18,10 +18,9 @@ contract Ownable {
    * @dev The Ownable constructor sets the original `owner` of the contract to the sender
    * account.
    */
-  function Ownable() {
+  function Ownable() public {
     owner = msg.sender;
   }
-
 
   /**
    * @dev Throws if called by any account other than the owner.
@@ -31,12 +30,11 @@ contract Ownable {
     _;
   }
 
-
   /**
    * @dev Allows the current owner to transfer control of the contract to a newOwner.
    * @param newOwner The address to transfer ownership to.
    */
-  function transferOwnership(address newOwner) onlyOwner public {
+  function transferOwnership(address newOwner) public onlyOwner {
     require(newOwner != address(0));
     OwnershipTransferred(owner, newOwner);
     owner = newOwner;
@@ -44,32 +42,15 @@ contract Ownable {
 
 }
 
-// File: ../authorizable/contracts/Authorizable.sol
+// File: authorizable/contracts/Authorizable.sol
 
-// @title Authorizable
-// The Authorizable contract provides authorization control functions.
+/**
+ * @title Authorizable
+ * @author Francesco Sullo <francesco@sullo.co>
+ * @dev The Authorizable contract provides governance.
+ */
 
-/*
-  The level is a uint <= maxLevel (64 by default)
-  
-    0 means not authorized
-    1..maxLevel means authorized
-
-  Having more levels allows to create hierarchical roles.
-  For example:
-    ...
-    operatorLevel: 6
-    teamManagerLevel: 10
-    ...
-    CTOLevel: 32
-    ...
-
-  If the owner wants to execute functions which require explicit authorization, it must authorize itself.
-  
-  If you need complex level, in the extended contract, you can add a function to generate unique roles based on combination of levels. The possibilities are almost unlimited, since the level is a uint256
-*/
-
-contract Authorizable is Ownable {
+contract Authorizable /** 0.1.6 */ is Ownable {
 
   uint public totalAuthorized;
 
@@ -83,6 +64,14 @@ contract Authorizable is Ownable {
   uint public maxLevel = 64;
   uint public authorizerLevel = 56;
 
+  bool public selfRevoke = true;
+  mapping (uint => bool) public selfRevokeException;
+
+  /**
+   * @dev Set the range of levels accepted by the contract
+   * @param _maxLevel The max level acceptable
+   * @param _authorizerLevel The minimum level to qualify a wallet as authorizer
+   */
   function setLevels(uint _maxLevel, uint _authorizerLevel) external onlyOwner {
     // this must be called before authorizing any address
     require(totalAuthorized == 0);
@@ -93,38 +82,65 @@ contract Authorizable is Ownable {
     authorizerLevel = _authorizerLevel;
   }
 
-  // Throws if called by any account which is not authorized.
+  /**
+  * @dev Allows to decide if users will be able to self revoke their level
+  * @param _selfRevoke The new value
+  */
+  function setSelfRevoke(bool _selfRevoke) onlyOwner external {
+    selfRevoke = _selfRevoke;
+  }
+
+  /**
+  * @dev Allows to set exceptions to selfRevoke when this is true
+  * @param _level The level not allowed to self-revoke
+  * @param _isActive `true` adds the lock, `false` removes it
+  */
+  function addSelfRevokeException(uint _level, bool _isActive) onlyOwner external {
+    selfRevokeException[_level] = _isActive;
+  }
+
+  /**
+   * @dev Throws if called by any account which is not authorized.
+   */
   modifier onlyAuthorized() {
     require(authorized[msg.sender] > 0);
     _;
   }
 
-  // Throws if called by any account which is not authorized at a specific level.
+  /**
+   * @dev Throws if called by any account which is not
+   *      authorized at a specific level.
+   * @param _level Level required
+   */
   modifier onlyAuthorizedAtLevel(uint _level) {
     require(authorized[msg.sender] == _level);
     _;
   }
 
-  // Throws if called by any account which is not authorized at some of the specified levels.
+  /**
+   * @dev Throws if called by any account which is not authorized
+   *      at some of the specified levels.
+   * @param _levels Levels required
+   */
   modifier onlyAuthorizedAtLevels(uint[] _levels) {
     require(__hasLevel(authorized[msg.sender], _levels));
     _;
   }
 
-  // Throws if called by any account which is not authorized at a minimum required level.
-  modifier onlyAuthorizedAtLevelMoreThan(uint _level) {
-    require(authorized[msg.sender] > _level);
+  /**
+   * @dev Throws if called by any account which has
+   *      a level of authorization not in the interval
+   * @param _minLevel Minimum level required
+   * @param _maxLevel Maximum level required
+   */
+  modifier onlyAuthorizedAtLevelsWithin(uint _minLevel, uint _maxLevel) {
+    require(authorized[msg.sender] >= _minLevel && authorized[msg.sender] <= _maxLevel);
     _;
   }
 
-  // Throws if called by any account which has a level of authorization less than a certan maximum.
-  modifier onlyAuthorizedAtLevelLessThan(uint _level) {
-    require(authorized[msg.sender] > 0 && authorized[msg.sender] < _level);
-    _;
-  }
-
-  // same modifiers but including the owner
-
+  /**
+    * @dev same modifiers above, but including the owner
+    */
   modifier onlyOwnerOrAuthorized() {
     require(msg.sender == owner || authorized[msg.sender] > 0);
     _;
@@ -140,77 +156,131 @@ contract Authorizable is Ownable {
     _;
   }
 
-  modifier onlyOwnerOrAuthorizedAtLevelMoreThan(uint _level) {
-    require(msg.sender == owner || authorized[msg.sender] > _level);
+  modifier onlyOwnerOrAuthorizedAtLevelsIn(uint _minLevel, uint _maxLevel) {
+    require(msg.sender == owner || (authorized[msg.sender] >= _minLevel && authorized[msg.sender] <= _maxLevel));
     _;
   }
 
-  modifier onlyOwnerOrAuthorizedAtLevelLessThan(uint _level) {
-    require(msg.sender == owner || (authorized[msg.sender] > 0 && authorized[msg.sender] < _level));
-    _;
-  }
-
-  // Throws if called by anyone who is not an authorizer.
+  /**
+    * @dev Throws if called by anyone who is not an authorizer.
+    */
   modifier onlyAuthorizer() {
     require(msg.sender == owner || authorized[msg.sender] >= authorizerLevel);
     _;
   }
 
 
-  // methods
-
-  // Allows the current owner and authorized with level >= authorizerLevel to add a new authorized address, or remove it, setting _level to 0
+  /**
+    * @dev Allows to add a new authorized address, or remove it, setting _level to 0
+    * @param _address The address to be authorized
+    * @param _level The level of authorization
+    */
   function authorize(address _address, uint _level) onlyAuthorizer external {
     __authorize(_address, _level);
   }
 
-  // Allows the current owner to remove all the authorizations.
+  /**
+    * @dev Allows to add a list of new authorized addresses.
+    *      Useful, for example, with whitelists
+    * @param _addresses Array of addresses to be authorized
+    * @param _level The level of authorization
+    */
+  function authorizeBatch(address[] _addresses, uint _level) onlyAuthorizer external {
+    require(_level > 0);
+    for (uint i = 0; i < _addresses.length; i++) {
+      __authorize(_addresses[i], _level);
+    }
+  }
+
+  /**
+   * @dev Allows to remove all the authorizations. Callable by the owner only.
+   *      We check the gas to avoid going out of gas when there are tons of
+   *      authorized addresses (for example when used for a whitelist).
+   *      If at the end of the operation there are still authorized
+   *      wallets the operation must be repeated.
+   */
   function deAuthorizeAll() onlyOwner external {
-    for (uint i = 0; i < __authorized.length; i++) {
+    for (uint i = 0; i < __authorized.length && msg.gas > 33e3; i++) {
       if (__authorized[i] != address(0)) {
         __authorize(__authorized[i], 0);
       }
     }
   }
 
-  // Allows an authorized to de-authorize itself.
+  /**
+   * @dev Allows to remove all the authorizations at a specific level.
+   * @param _level The level of authorization
+   */
+  function deAuthorizeAllAtLevel(uint _level) onlyAuthorizer external {
+    for (uint i = 0; i < __authorized.length && msg.gas > 33e3; i++) {
+      if (__authorized[i] != address(0) && authorized[__authorized[i]] == _level) {
+        __authorize(__authorized[i], 0);
+      }
+    }
+  }
+
+  /**
+   * @dev Allows an authorized to de-authorize itself.
+   */
   function deAuthorize() onlyAuthorized external {
+    require(selfRevoke == true && selfRevokeException[authorized[msg.sender]] == false);
     __authorize(msg.sender, 0);
   }
 
-  // internal functions
+  /**
+   * @dev Performs the actual authorization/de-authorization
+   *      If there's no change, it doesn't emit any event, to reduce gas usage.
+   * @param _address The address to be authorized
+   * @param _level The level of authorization. 0 to remove it.
+   */
   function __authorize(address _address, uint _level) internal {
     require(_address != address(0));
-    require(_level >= 0 && _level <= maxLevel);
+    require(_level <= maxLevel);
 
     uint i;
-    if (_level > 0) {
-      bool alreadyIndexed = false;
-      for (i = 0; i < __authorized.length; i++) {
-        if (__authorized[i] == _address) {
-          alreadyIndexed = true;
-          break;
+    if (_level > 0 && authorized[_address] != _level) {
+        bool alreadyIndexed = false;
+        for (i = 0; i < __authorized.length; i++) {
+          if (__authorized[i] == _address) {
+            alreadyIndexed = true;
+            break;
+          }
         }
-      }
-      if (alreadyIndexed == false) {
-        __authorized.push(_address);
-        totalAuthorized++;
-      }
-      AuthorizedAdded(msg.sender, _address, _level);
-      authorized[_address] = _level;
-    } else {
+        if (alreadyIndexed == false) {
+          bool emptyFound = false;
+          // before we try to reuse an empty element of the array
+          for (i = 0; i < __authorized.length; i++) {
+            if (__authorized[i] == 0) {
+              __authorized[i] = _address;
+              emptyFound = true;
+              break;
+            }
+          }
+          if (emptyFound == false) {
+            __authorized.push(_address);
+          }
+          totalAuthorized++;
+        }
+        AuthorizedAdded(msg.sender, _address, _level);
+        authorized[_address] = _level;
+    } else if (_level == 0 && authorized[_address] > 0) {
       for (i = 0; i < __authorized.length; i++) {
         if (__authorized[i] == _address) {
           __authorized[i] = address(0);
           totalAuthorized--;
+          AuthorizedRemoved(msg.sender, _address);
+          delete authorized[_address];
           break;
         }
       }
-      AuthorizedRemoved(msg.sender, _address);
-      delete authorized[_address];
     }
   }
 
+  /**
+   * @dev Check is a level is included in an array of levels. Used by modifiers
+   * @param _level Level to be checked
+   * @param _levels Array of required levels
+   */
   function __hasLevel(uint _level, uint[] _levels) internal pure returns (bool) {
     bool has = false;
     for (uint i; i < _levels.length; i++) {
@@ -222,40 +292,64 @@ contract Authorizable is Ownable {
     return has;
   }
 
-  // helpers callable by other contracts
-
+  /**
+   * @dev Allows a wallet to check if it is authorized
+   */
   function amIAuthorized() external constant returns (bool) {
     return authorized[msg.sender] > 0;
   }
 
+  /**
+   * @dev Allows any authorizer to get the list of the authorized wallets
+   */
+  function getAuthorized() external onlyAuthorizer constant returns (address[]) {
+    return __authorized;
+  }
+
 }
 
-// File: zeppelin/math/SafeMath.sol
+// File: zeppelin-solidity/contracts/math/SafeMath.sol
 
 /**
  * @title SafeMath
  * @dev Math operations with safety checks that throw on error
  */
 library SafeMath {
-  function mul(uint256 a, uint256 b) internal constant returns (uint256) {
+
+  /**
+  * @dev Multiplies two numbers, throws on overflow.
+  */
+  function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+    if (a == 0) {
+      return 0;
+    }
     uint256 c = a * b;
-    assert(a == 0 || c / a == b);
+    assert(c / a == b);
     return c;
   }
 
-  function div(uint256 a, uint256 b) internal constant returns (uint256) {
+  /**
+  * @dev Integer division of two numbers, truncating the quotient.
+  */
+  function div(uint256 a, uint256 b) internal pure returns (uint256) {
     // assert(b > 0); // Solidity automatically throws when dividing by 0
     uint256 c = a / b;
     // assert(a == b * c + a % b); // There is no case in which this doesn't hold
     return c;
   }
 
-  function sub(uint256 a, uint256 b) internal constant returns (uint256) {
+  /**
+  * @dev Subtracts two numbers, throws on overflow (i.e. if subtrahend is greater than minuend).
+  */
+  function sub(uint256 a, uint256 b) internal pure returns (uint256) {
     assert(b <= a);
     return a - b;
   }
 
-  function add(uint256 a, uint256 b) internal constant returns (uint256) {
+  /**
+  * @dev Adds two numbers, throws on overflow.
+  */
+  function add(uint256 a, uint256 b) internal pure returns (uint256) {
     uint256 c = a + b;
     assert(c >= a);
     return c;
