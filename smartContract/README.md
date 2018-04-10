@@ -80,6 +80,7 @@ After running the script you will see that it is deploying. At the end of the pr
 ### 6. Set up the Store
 
 Open [MyEtherWallet](https://myetherwallet.com) and create a new wallet importing the private key of the testnet wallet created before.
+Move the network to Ropsten (Infura).
 Click on `Contracts`. In the form copy the address where the Store has been published (see above) and the abi of SubscriptionStore.sol (in `build/contracts`).
 MEW loads the contracts and show the functions. Select `authorize` and authorize the address of SubscriptioManager setting the level to 1. It will ask which wallet to use, select the testnet wallet (which is the owner of the contract, since it is the wallet used to publish it).
 
