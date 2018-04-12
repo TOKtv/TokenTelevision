@@ -72,9 +72,13 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     TempData memory tempData = __tempData[_oraclizeID];
     if (keccak256(_result) == keccak256('true')) {
 
-      newSubscriptionConfirmed(tempData.sender, tempData.txId);
+      uint expiration = store.getExpirationTimestamp(tempData.sender);
       store.setSubscription(tempData.sender, tempData.txId, tempData.tier);
-
+      if (store.getExpirationTimestamp(tempData.sender) > expiration) {
+        newSubscriptionConfirmed(tempData.sender, tempData.txId);
+      } else {
+        newSubscriptionFailed(tempData.sender, tempData.txId);
+      }
     } else {
       newSubscriptionFailed(tempData.sender, tempData.txId);
     }
