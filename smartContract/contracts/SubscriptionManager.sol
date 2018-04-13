@@ -30,9 +30,9 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
     _;
   }
 
-  event newSubscriptionStarted(address indexed _address, uint _txId);
-  event newSubscriptionConfirmed(address indexed _address, uint _txId);
-  event newSubscriptionFailed(address indexed _address, uint _txId);
+  event NewSubscriptionStarted(address indexed _address, uint _txId);
+  event NewSubscriptionConfirmed(address indexed _address, uint _txId);
+  event NewSubscriptionFailed(address indexed _address, uint _txId, uint8 _errorCode);
 
   function setStore(address _address) external onlyOwner {
     require(_address != address(0));
@@ -51,7 +51,7 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
   function verifySubscription(uint _txId, uint8 _tier, uint _gasPrice, uint _gasLimit) external isStoreSet payable {
 
     oraclize_setCustomGasPrice(_gasPrice);
-    newSubscriptionStarted(msg.sender, _txId);
+    NewSubscriptionStarted(msg.sender, _txId);
 
     bytes32 oraclizeID = oraclize_query(
       "URL",
@@ -75,12 +75,12 @@ contract SubscriptionManager is usingOraclize, Pausable, Authorizable {
       uint expiration = store.getExpirationTimestamp(tempData.sender);
       store.setSubscription(tempData.sender, tempData.txId, tempData.tier);
       if (store.getExpirationTimestamp(tempData.sender) > expiration) {
-        newSubscriptionConfirmed(tempData.sender, tempData.txId);
+        NewSubscriptionConfirmed(tempData.sender, tempData.txId);
       } else {
-        newSubscriptionFailed(tempData.sender, tempData.txId);
+        NewSubscriptionFailed(tempData.sender, tempData.txId, 1);
       }
     } else {
-      newSubscriptionFailed(tempData.sender, tempData.txId);
+      NewSubscriptionFailed(tempData.sender, tempData.txId, 2);
     }
   }
 
